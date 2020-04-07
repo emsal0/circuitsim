@@ -1,0 +1,4 @@
+name = "Circuits"
+uuid = "1fe5b5c9-5a26-44b8-a201-c31ba784ce36"
+authors = ["Emmanuel Sales <absolutezero2a03@gmail.com>"]
+version = "0.1.0"
