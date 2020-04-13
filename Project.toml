@@ -2,3 +2,7 @@ name = "Circuits"
 uuid = "1fe5b5c9-5a26-44b8-a201-c31ba784ce36"
 authors = ["Emmanuel Sales <absolutezero2a03@gmail.com>"]
 version = "0.1.0"
+
+[deps]
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

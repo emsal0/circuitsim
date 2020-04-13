@@ -1,39 +1,28 @@
+using LinearAlgebra
+
 module Circuits
 
-export Circuit, Node, traverse
+export Circuit, Node, BaseNode, VoltageSource, traverse, Edge
+export Connection, Resistor, EmptyWire
+export register_node!, connect_nodes!, solve_voltages
+
+const DEBUG = true
 
 # Node
 abstract type Node end
 abstract type Connection end
-Edge = Tuple{Node, Connection}
+Edge = Tuple{String, String, Connection}
 
-mutable struct BaseNode <: Node
-    neighbors::Set{Edge}
-    function BaseNode()
-        return BaseNode(neighbors = Set{NamedTuple{(:dest, :resistance), 
-                                        Tuple{Node,AbstractFloat}}}())  
-    end
-end
+mutable struct BaseNode <: Node end
 
 mutable struct VoltageSource <: Node
     added_voltage::AbstractFloat
-    neighbors::Set{Edge}
-    function VoltageSource(added_voltage)
-        added_voltage = added_voltage
-        new(added_voltage, Set())
-    end
-end
-
-neighbors(n::Node) = function(n)
-    if (isdefined(n, :neighbors))
-        return n.neighbors
-    else
-        throw(ArgumentError("Node does not have a well-defined neighbor set"))
-    end
 end
 
 
 # Connection
+
+struct EmptyWire <: Connection end
 
 mutable struct Resistor <: Connection
     resistance::AbstractFloat # in ohms
@@ -58,15 +47,15 @@ end
 # Circuit
 mutable struct Circuit
     ground::Node
-
     nodes::Dict{String, Node}
+    edges::Array{Edge}
 
     function Circuit()
-        ground = VoltageSource(0)
+        ground = BaseNode()
         nodes = Dict()
         get!(nodes, "GND", ground)
-        ground.added_voltage = 0
-        return new(ground, nodes)
+        edges = []
+        return new(ground, nodes, edges)
     end
 end
 
@@ -82,17 +71,55 @@ function get_node(c::Circuit, name::String)
     return c.nodes[name]
 end
 
-function connect_nodes!(c::Circuit, name1, name2::String, c::Connection)
-    n1 = c.nodes[name1]
-    n2 = c.nodes[name2]
-    e1 = (n2, c)
-    e2 = (n1, c)
-    push!(n1.neighbors, e1)
-    push!(n2.neighbors, e2)
+function connect_nodes!(c::Circuit, name1, name2::String, con::Connection)
+    e = (name1, name2, con)
+    push!(c.edges, e)
+end
+
+function update_soln_matx!(S::Array{T, 2}, c, i, j, node1, node2, R) where {T <: Real}
+    if !isa(node1, VoltageSource) && node1 != c.ground
+        S[i, i] += 1 / R
+        S[i, j] += -1 / R
+    end
 end
 
 function solve_voltages(c::Circuit)
-    return []
+    names = [n[1] for n in collect(c.nodes)]
+    node_to_idx = Dict([name => i for (i, name) in enumerate(names)])
+    N = length(c.nodes)
+    S = zeros(N, N)
+    b = zeros(N, 1)
+
+    z = node_to_idx["GND"]
+    S[z,z] = 1
+
+    for (name, node) in c.nodes
+        if node isa VoltageSource
+            i = node_to_idx[name]
+            S[i, i] = 1
+            b[i] = node.added_voltage
+        end
+    end
+
+    for (name1, name2, con) in c.edges
+        node1 = c.nodes[name1]
+        node2 = c.nodes[name2]
+        i = node_to_idx[name1]
+        j = node_to_idx[name2]
+        if con isa Resistor
+            R = con.resistance
+            update_soln_matx!(S, c, i, j, node1, node2, R)
+            update_soln_matx!(S, c, j, i, node2, node1, R)
+        else
+            throw(MethodError("Only resistors supported at this time."))
+        end
+    end
+    
+    if DEBUG
+        println(S)
+        println(b)
+    end
+    return inv(S) * b
 end
 
 end # module
