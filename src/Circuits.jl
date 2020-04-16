@@ -28,6 +28,14 @@ mutable struct Resistor <: Connection
     resistance::AbstractFloat # in ohms
 end
 
+mutable struct Capacitor <: Connection
+    capacitance::AbstractFloat # in ohms
+end
+
+mutable struct Inductor <: Connection
+    inductance::AbstractFloat # in ohms
+end
+
 function traverse(root::Node)
     visited = Set()
     queue = [root]
@@ -76,11 +84,25 @@ function connect_nodes!(c::Circuit, name1, name2::String, con::Connection)
     push!(c.edges, e)
 end
 
-function update_soln_matx!(S::Array{T, 2}, c, i, j, node1, node2, R) where {T <: Real}
+function update_rows!(S::Array{T, 2}, c, i, j, node1, node2, R) where {T <: Real}
     if !isa(node1, VoltageSource) && node1 != c.ground
         S[i, i] += 1 / R
         S[i, j] += -1 / R
     end
+end
+
+function update_soln_matx!(con::Connection, c, node_to_idx, S)
+    throw(ArgumentError("Connection type not supported yet."))
+end
+
+function update_soln_matx!(con::Resistor, c, name1, name2, node_to_idx, S)
+    node1 = c.nodes[name1]
+    node2 = c.nodes[name2]
+    i = node_to_idx[name1]
+    j = node_to_idx[name2]
+    R = con.resistance
+    update_rows!(S, c, i, j, node1, node2, R)
+    update_rows!(S, c, j, i, node2, node1, R)
 end
 
 function solve_voltages(c::Circuit)
@@ -102,19 +124,9 @@ function solve_voltages(c::Circuit)
     end
 
     for (name1, name2, con) in c.edges
-        node1 = c.nodes[name1]
-        node2 = c.nodes[name2]
-        i = node_to_idx[name1]
-        j = node_to_idx[name2]
-        if con isa Resistor
-            R = con.resistance
-            update_soln_matx!(S, c, i, j, node1, node2, R)
-            update_soln_matx!(S, c, j, i, node2, node1, R)
-        else
-            throw(MethodError("Only resistors supported at this time."))
-        end
+        update_soln_matx!(con, c, name1, name2, node_to_idx, S)
     end
-    
+
     if DEBUG
         println(S)
         println(b)
