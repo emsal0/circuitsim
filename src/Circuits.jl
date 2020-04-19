@@ -3,10 +3,10 @@ using LinearAlgebra
 module Circuits
 
 export Circuit, Node, BaseNode, VoltageSource, traverse, Edge
-export Connection, Resistor, EmptyWire
+export Connection, Resistor, Capacitor, Inductor, EmptyWire
 export register_node!, connect_nodes!, solve_voltages
 
-const DEBUG = true
+const DEBUG = false
 
 # Node
 abstract type Node end
@@ -84,10 +84,10 @@ function connect_nodes!(c::Circuit, name1, name2::String, con::Connection)
     push!(c.edges, e)
 end
 
-function update_rows!(S::Array{T, 2}, c, i, j, node1, node2, R) where {T <: Real}
+function update_rows!(S::Array{T, 2}, c, i, j, node1, node2, Z) where {T <: Complex}
     if !isa(node1, VoltageSource) && node1 != c.ground
-        S[i, i] += 1 / R
-        S[i, j] += -1 / R
+        S[i, i] += 1 / Z
+        S[i, j] += -1 / Z
     end
 end
 
@@ -95,22 +95,26 @@ function update_soln_matx!(con::Connection, c, node_to_idx, S)
     throw(ArgumentError("Connection type not supported yet."))
 end
 
-function update_soln_matx!(con::Resistor, c, name1, name2, node_to_idx, S)
+function impedance(con::Resistor) con.resistance end
+function impedance(con::Capacitor) 1/(im * con.capacitance) end
+function impedance(con::Inductor) im * con.Inductance end
+
+function update_soln_matx!(con::Connection, c, name1, name2, node_to_idx, S)
+    Z = impedance(con)
     node1 = c.nodes[name1]
     node2 = c.nodes[name2]
     i = node_to_idx[name1]
     j = node_to_idx[name2]
-    R = con.resistance
-    update_rows!(S, c, i, j, node1, node2, R)
-    update_rows!(S, c, j, i, node2, node1, R)
+    update_rows!(S, c, i, j, node1, node2, Z)
+    update_rows!(S, c, j, i, node2, node1, Z)
 end
 
 function solve_voltages(c::Circuit)
     names = [n[1] for n in collect(c.nodes)]
     node_to_idx = Dict([name => i for (i, name) in enumerate(names)])
     N = length(c.nodes)
-    S = zeros(N, N)
-    b = zeros(N, 1)
+    S = zeros(Complex, (N, N))
+    b = zeros(Complex, (N, 1))
 
     z = node_to_idx["GND"]
     S[z,z] = 1
